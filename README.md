@@ -34,7 +34,7 @@ theory), ODE functions for
 <!-- install.packages("readsdr") -->
 <!-- ``` -->
 
-<!--  And the development version from [GitHub](https://github.com/) with:
+<!--  And the development version from [GitHub](https://github.com/) with: -->
 
 The development version from [GitHub](https://github.com/) with:
 
