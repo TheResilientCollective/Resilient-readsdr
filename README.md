@@ -1,7 +1,7 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# readsdr
+# Resilient-readsdr
 
 <!-- badges: start -->
 
@@ -11,6 +11,8 @@ coverage](https://codecov.io/gh/jandraor/readsdr/branch/master/graph/badge.svg)]
 status](https://www.r-pkg.org/badges/version/readsdr)](https://CRAN.R-project.org/package=readsdr)
 [![R-CMD-check](https://github.com/jandraor/readsdr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/jandraor/readsdr/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
+
+This is a fork of `jandraor/readsdr` that is customized for the Resilient Collectives dynamic system models.
 
 ## Overview
 
@@ -25,18 +27,20 @@ theory), ODE functions for
 
 ## Installation
 
-You can install the released version of readsdr from
-[CRAN](https://CRAN.R-project.org) with:
+<!-- You can install the released version of readsdr from -->
+<!-- [CRAN](https://CRAN.R-project.org) with: -->
 
-``` r
-install.packages("readsdr")
-```
+<!-- ``` r -->
+<!-- install.packages("readsdr") -->
+<!-- ``` -->
 
-And the development version from [GitHub](https://github.com/) with:
+<!--  And the development version from [GitHub](https://github.com/) with:
+
+The development version from [GitHub](https://github.com/) with:
 
 ``` r
 # install.packages("devtools")
-devtools::install_github("jandraor/readsdr")
+devtools::install_github("TheResilientCollective/Resilient-readsdr")
 ```
 
 ## Usage
