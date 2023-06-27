@@ -64,7 +64,7 @@ if_else_condition <- function(equation) {
 
 translate_step <- function(equation) {
   pattern_step  <- stringr::regex("STEP\\((.+?),(.+?)\\)",
-                                  ignore_case = TRUE, dotall = TRUE)
+                                  ignore_case = FALSE, dotall = TRUE)
   there_is_step <- stringr::str_detect(equation, pattern_step)
 
 
@@ -152,7 +152,7 @@ translate_pulse <- function(equation, vendor) {
 
     # Pattern 1 is a PULSE with three args
     # It is a pulse train
-    pattern1 <- stringr::regex("PULSE\\((.+),(.+),(.+)\\)",
+    pattern1 <- stringr::regex("\\(PULSE\\((.+),(.+),(.+)\\)\\)",
                                dotall = TRUE, ignore_case = TRUE)
     there_is_p1 <- stringr::str_detect(equation, pattern1)
 
