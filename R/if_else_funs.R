@@ -113,11 +113,12 @@ translate_pulse_train <- function(equation) {
 translate_pulse <- function(equation, vendor) {
 
   # Screening
-  pattern_screen  <- stringr::regex("PULSE\\(.+?\\)",
+  pattern_screen  <- stringr::regex("PULSE\\(",
                                     dotall = TRUE, ignore_case = TRUE)
 
   n_pulses        <- stringr::str_count(equation, pattern_screen)
 
+  if(n_pulses == 0) return(equation)
   if(n_pulses > 1) stop("Only one PULSE statement per variable is permitted")
 
   if(vendor == "Vensim") {
@@ -150,17 +151,42 @@ translate_pulse <- function(equation, vendor) {
 
   if(vendor == "isee") {
 
-    # Pattern 1 is a PULSE with three args
-    # It is a pulse train
-    pattern1 <- stringr::regex("\\(PULSE\\((.+),(.+),(.+)\\)\\)",
-                               dotall = TRUE, ignore_case = TRUE)
-    there_is_p1 <- stringr::str_detect(equation, pattern1)
+    pulse_call <- extract_function_call(equation, "PULSE")
+    if (all(is.na(pulse_call))) {
+      stop(paste("ERROR Parsing PULSE function call in:", equation))
+    }
 
-    if(there_is_p1) {
-      string_match <- stringr::str_match(equation, pattern1)
-      volume_p     <- string_match[[2]] # volume pulse
-      start_p      <- string_match[[3]] # start pulse
-      interval     <- string_match[[4]]
+    args_list <- stringr::str_split(pulse_call$args, ",")[[1]]
+
+    if ((length(args_list) < 1) | (length(args_list) > 3)) {
+      stop("PULSE MUST be called with 1-3 arguments!")
+    }
+
+    volume_p     <- args_list[[1]] # volume pulse
+    if (length(args_list) == 1) {
+      # A PULSE with one arg magnifies the variable
+      replacement  <- stringr::str_glue("{volume_p} / timestep()")
+      new_equation <- stringr::str_replace(equation,
+                                           stringr::fixed(pulse_call$match),
+                                           replacement)
+      return(new_equation)
+    }
+
+    start_p      <- args_list[[2]] # start pulse
+    if(length(args_list) == 2) {
+      # A PULSE with two args is a magnified step
+      replacement <- stringr::str_glue(
+        "ifelse(time >= {start_p}, {volume_p} / timestep(), 0)")
+      new_equation <- stringr::str_replace(equation,
+                                           stringr::fixed(pulse_call$match),
+                                           replacement)
+      return(new_equation)
+    }
+
+
+    if(length(args_list) == 3) {
+      # A PULSE with three args is a pulse train
+      interval     <- args_list[[3]]
 
       interval_num <- suppressWarnings(as.numeric(interval))
 
@@ -168,53 +194,19 @@ translate_pulse <- function(equation, vendor) {
         replacement <- stringr::str_glue(
           "sd_pulse_s(time, {volume_p},{start_p},{interval})"
         )
-        new_equation <- stringr::str_replace(equation, pattern1,
+        new_equation <- stringr::str_replace(equation,
+                                             stringr::fixed(pulse_call$match),
                                              replacement)
         return(new_equation)
       }
 
       replacement  <- get_pulse_s_statement(volume_p, start_p, interval_num)
-      new_equation <- stringr::str_replace(equation, pattern1, replacement)
-      return(new_equation)
-    }
-
-    # Pattern 2 is a PULSE with two args
-    # It is a magnified step
-
-    pattern2 <- stringr::regex("PULSE\\((.+),(.+)\\)",
-                               dotall = TRUE, ignore_case = TRUE)
-
-    there_is_p2 <- stringr::str_detect(equation, pattern2)
-
-    if(there_is_p2) {
-      string_match <- stringr::str_match(equation, pattern2)
-      volume_p     <- string_match[[2]] # volume pulse
-      start_p      <- string_match[[3]] # start pulse
-      replacement <- stringr::str_glue(
-        "ifelse(time >= {start_p}, {volume_p} / timestep(), 0)")
-      new_equation <- stringr::str_replace(equation, pattern2, replacement)
-      return(new_equation)
-    }
-
-    # Pattern 3 is a PULSE with one arg
-    # It magnifies the variable
-
-    pattern3 <- stringr::regex("PULSE\\((.+)\\)",
-                               dotall = TRUE, ignore_case = TRUE)
-
-    there_is_p3 <- stringr::str_detect(equation, pattern3)
-
-    if(there_is_p3) {
-      string_match <- stringr::str_match(equation, pattern3)
-      volume_p     <- string_match[[2]] # volume pulse
-
-      replacement  <- stringr::str_glue("{volume_p} / timestep()")
-      new_equation <- stringr::str_replace(equation, pattern3, replacement)
+      new_equation <- stringr::str_replace(equation,
+                                           stringr::fixed(pulse_call$match),
+                                           replacement)
       return(new_equation)
     }
   }
-
-  equation
 }
 
 get_pulse_s_statement <- function(volume_p, start_p, interval_num) {
@@ -239,4 +231,25 @@ get_pulse_v_statement <- function(pulse_start, pulse_width) {
   if_false  <- stringr::str_glue(">= {pulse_start} & time < {end_pulse}")
   condition <- ifelse(pulse_width == 0L, if_true, if_false)
   statement <- stringr::str_glue("ifelse(time {condition}, 1, 0)")
+}
+
+#' Extract one function call from an xmile string.
+#'
+#' Finds the given function name (not as part of another word), followed by
+#' a matched set of parentheses.
+#'
+#' @param x A string of xmile.
+#' @param function_name The name of the function to find.
+#' @returns List with `match` being the full match and `args` just the part
+#'   inside the parentheses.
+extract_function_call <- function(x, function_name) {
+  pat <- paste0("\\b", function_name, "(\\((?:[^()]+|(?-1))*+\\))")
+  call_match <- regmatches(x, regexpr(pat, x, perl=TRUE, ignore.case = TRUE))
+  if (length(call_match) == 0) {
+    return(NA)
+  }
+  func_len <- stringr::str_length(function_name)
+  list(
+    match = call_match,
+    args = stringr::str_sub(call_match, func_len + 2, -2))
 }

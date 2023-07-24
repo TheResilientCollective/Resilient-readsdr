@@ -60,6 +60,50 @@ extract_structure_from_XMILE <- function(filepath, inits_vector = NULL,
        constants = constants)
 }
 
+#' Parse one constant (\code{<eqn>} node with numeric value)
+#'
+#' Pull out \emph{name}, \emph{dimensions}, \emph{element} for each dimensional
+#' element, \emph{units}, and \emph{doc}.
+#'
+#' \emph{WARNING} this does not handle multi dimensional arrays or integer
+#' indexed arrays.  Only single dimensional arrays with named subscripts.
+#'
+#' @param node_eqn constant \code{eqn} node to extract info for
+#'
+#' @return A tibble
+#'
+extract_parameters_one_constant <- function(node_eqn) {
+  subscript <- node_eqn %>%
+    xml2::xml_parent() %>%
+    xml2::xml_attr("subscript")
+  if (xml2::xml_name(xml2::xml_parent(node_eqn)) == "element") {
+    node_aux <- node_eqn %>%
+      xml2::xml_parent() %>%
+      xml2::xml_parent()
+    if (is.na(subscript)) {
+      warning("Can't handle integer-indexed arrays yet:",
+              xml2::xml_attr(node_aux, "name"))
+      return(dplyr::tibble())
+    }
+  } else {
+    node_aux <- xml2::xml_parent(node_eqn)
+  }
+  dplyr::tibble(
+    name = xml2::xml_attr(node_aux, "name"),
+    dimensions = node_aux %>%
+      xml2::xml_find_first("./d1:dimensions/d1:dim") %>%
+      xml2::xml_attr("name"),
+    subscript = subscript,
+    value = xml2::xml_double(node_eqn),
+    units = node_aux %>%
+      xml2::xml_find_first("./d1:units") %>%
+      xml2::xml_text(),
+    doc = node_aux %>%
+      xml2::xml_find_first("./d1:doc") %>%
+      xml2::xml_text()
+  )
+}
+
 compute_init_value <- function(var_name, equation, auxs, fixed_inits) {
 
   tryCatch(
