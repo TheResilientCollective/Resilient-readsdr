@@ -60,7 +60,7 @@ extract_structure_from_XMILE <- function(filepath, inits_vector = NULL,
        constants = constants)
 }
 
-#' Parse one constant (\code{<eqn>} node with numeric value)
+#' Parse one constant \code{<eqn>} (node with numeric value)
 #'
 #' Pull out \emph{name}, \emph{dimensions}, \emph{element} for each dimensional
 #' element, \emph{units}, and \emph{doc}.
@@ -102,6 +102,35 @@ extract_parameters_one_constant <- function(node_eqn) {
       xml2::xml_find_first("./d1:doc") %>%
       xml2::xml_text()
   )
+}
+
+#' Modify one constant \code{<eqn>} (node with numeric value)
+#'
+#' Find constant in xmile, matched by \code{name}, \code{dimensions}, and
+#' \code{elements}.  Modify \code{value} field to match input row.
+#'
+#' \emph{WARNING} As above, this does not handle multi dimensional arrays or
+#' integer indexed arrays.
+#'
+#' @param new_row Row in the modified dataframe from which to take values.
+#' @param xmile Full xmile object to be modified.
+#'
+modify_one_constant_node <- function(new_row, xmile) {
+  xpath <- sprintf('.//d1:variables//d1:aux[@name="%s"]', new_row["name"])
+  if (!is.na(new_row["dimensions"])) {
+    xpath = paste0(
+      xpath,
+      sprintf('/d1:element[@subscript="%s"]', new_row["subscript"])
+    )
+  }
+
+  xpath <- paste0(xpath, "/d1:eqn")
+  xml_node <- xml2::xml_find_first(xmile, xpath)
+  if(is.na(xml_node)) {
+    warning(sprintf('Failed to find xml node: "%s"', xpath))
+    return();
+  }
+  xml2::xml_text(xml_node) <- as.character(new_row["value"])
 }
 
 compute_init_value <- function(var_name, equation, auxs, fixed_inits) {
