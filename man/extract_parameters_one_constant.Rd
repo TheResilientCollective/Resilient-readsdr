@@ -2,7 +2,7 @@
 % Please edit documentation in R/xmile_helpers.R
 \name{extract_parameters_one_constant}
 \alias{extract_parameters_one_constant}
-\title{Parse one constant (\code{<eqn>} node with numeric value)}
+\title{Parse one constant \code{<eqn>} (node with numeric value)}
 \usage{
 extract_parameters_one_constant(node_eqn)
 }

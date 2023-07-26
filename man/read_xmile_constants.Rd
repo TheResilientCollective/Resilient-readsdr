@@ -12,16 +12,16 @@ or .xmile. Vensim files (.mdl) are not xmile files. They must be exported
 from Vensim with extension .xmile}
 }
 \value{
-a tibble with information on all constants in the model
+full contents of xmile file plus tibble with extracted constants
 }
 \description{
-\code{read_xmile_constants} parses xmile file and returns constant terms
+\code{read_xmile_constants} parses xmile file for constant terms
 }
 \details{
 This lightweight version of the \code{\link{read_xmile}} function extracts
 just the constant terms from the xml from the file specified via
 \code{filepath}.  Returned dataframe may be manipulated and then merged back
-to the xmile file via \code{\link{write_xmile_constants}}.
+to the xmile file via \code{\link{merge_xmile_constants}}.
 
 A \emph{constant} in this context is an \code{<eqn>} node of numeric value
 contained within an \code{<aux>} node under \code{<variables>}.
@@ -39,3 +39,8 @@ This function extracts a tibble with one row for each constant and columns:
 path <- system.file("models", "SIR.stmx", package = "readsdr")
 read_xmile_constants(path)
 }
+\seealso{
+Other Constant Parameter Manipulators: 
+\code{\link{merge_xmile_constants}()}
+}
+\concept{Constant Parameter Manipulators}
