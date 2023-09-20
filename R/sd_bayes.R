@@ -1,5 +1,16 @@
 #' Create Stan file for Bayesian inference
 #'
+#' @section Negative binomial measurement component:
+#'
+#' While this package aims to avoid making decisions for users whenever
+#' possible, I have taken the liberty to automate the transformation of phi
+#' (the concentration parameter) when using the Negative Binomial distribution
+#' (\href{https://mc-stan.org/docs/functions-reference/nbalt.html}{alternative parameterisation})
+#' as a measurement component. \code{sd_Bayes()} automatically creates an
+#' inverse phi parameter for computational efficiency, which will be subject to
+#' inference (instead of phi). Additionally, I have provided a default prior for
+#' this inv_phi but users can override it as needed.
+#'
 #' @param meas_mdl A list of strings. Each string corresponds to a sampling
 #' statement written in Stan language.
 #' @param estimated_params A list of lists. Each sublist describes each
@@ -71,7 +82,7 @@ sd_Bayes <- function(filepath, meas_mdl, estimated_params, data_params = NULL,
                                    XMILE_structure = mdl_structure)
 
   stan_data   <- stan_data(meas_mdl, any_unk_inits, LFO_CV, data_params,
-                           data_inits)
+                           data_inits, length(lvl_obj))
 
   stan_params <- stan_params(estimated_params)
 
@@ -94,6 +105,8 @@ extract_extra_params <- function(meas_obj) {
   dist_obj        <- get_dist_obj(decomposed_meas$rhs)
 
   if(dist_obj$dist_name == "neg_binomial_2") {
+
+    if(is_string_numeric(dist_obj$phi)) return(NULL)
 
     par_name <- as.character(stringr::str_glue("inv_{dist_obj$phi}"))
 
