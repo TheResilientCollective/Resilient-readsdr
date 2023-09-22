@@ -249,6 +249,11 @@ interpret_equations_isee <- function(non_const_obj, consts, aux_xml,
                 builtin_stocks = DELAYN_translation$stock_list))
   }
 
+  if (stringr::str_detect(equation, "\\b(?i)previous\\b")) {
+    PR_translation <- translate_previous(var_name, equation, "isee")
+    return(list(vars = PR_translation))
+  }
+
   stl_smooth1 <- stringr::str_detect(equation, "\\bSMTH1\\b")
 
   if(stl_smooth1) {

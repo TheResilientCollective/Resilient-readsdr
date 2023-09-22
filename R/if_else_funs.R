@@ -233,23 +233,3 @@ get_pulse_v_statement <- function(pulse_start, pulse_width) {
   statement <- stringr::str_glue("ifelse(time {condition}, 1, 0)")
 }
 
-#' Extract one function call from an xmile string.
-#'
-#' Finds the given function name (not as part of another word), followed by
-#' a matched set of parentheses.
-#'
-#' @param x A string of xmile.
-#' @param function_name The name of the function to find.
-#' @returns List with `match` being the full match and `args` just the part
-#'   inside the parentheses.
-extract_function_call <- function(x, function_name) {
-  pat <- paste0("\\b", function_name, "(\\((?:[^()]+|(?-1))*+\\))")
-  call_match <- regmatches(x, regexpr(pat, x, perl=TRUE, ignore.case = TRUE))
-  if (length(call_match) == 0) {
-    return(NA)
-  }
-  func_len <- stringr::str_length(function_name)
-  list(
-    match = call_match,
-    args = stringr::str_sub(call_match, func_len + 2, -2))
-}
