@@ -145,6 +145,47 @@ translate_delay <- function(equation, vendor) {
   }
 }
 
+
+translate_previous <- function(var_name, equation, vendor) {
+
+  if(vendor != "isee") {
+    return(equation)
+  }
+  prev_call <- extract_function_call(equation, "PREVIOUS")
+  if (all(is.na(prev_call))) {
+    stop(paste("ERROR Parsing PREVIOUS function call in:", equation))
+  }
+  args_list <- stringr::str_split(prev_call$args, ",")[[1]]
+
+  if (length(args_list) != 2) {
+    # NOTE: this can't handle commas inside function calls!  So, e.g.,
+    #       you can't do `PREVIOUS(SELF, MAX(x1,x2))`
+    stop("Expected PREVIOUS to be called with exactly 2 arguments!")
+  }
+
+  past_expr <- var_name
+  if (tolower(args_list[1]) != "self") {
+    past_expr <- args_list[1]
+  }
+  init = args_list[2]
+
+  fixed_dly <- stringr::str_glue(
+    "sd_fixed_delay('{past_expr}', time, timestep(), {init}, .memory)"
+  ) %>% as.character()
+
+  eqn = stringr::str_replace(equation,
+                             stringr::fixed(prev_call$match),
+                             fixed_dly)
+  var_list <- list(
+    list(
+      name = var_name,
+      equation = eqn
+    )
+  )
+
+  return(var_list)
+}
+
 identify_delayed_vars <- function(variables) {
 
   lapply(variables, function(var_obj) {

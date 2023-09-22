@@ -54,6 +54,9 @@ arrange_variables <- function(var_list) {
     lhs          <- var_list[[pos_equation]]$name
     rh_vars      <- extract_variables(lhs, equation)
 
+    # Filtering out self reference to lhs variable name
+    rh_vars <- rh_vars[rh_vars != lhs]
+
     if(length(rh_vars) == 0L) {
 
       msg <- paste0("There are no variables in the RHS of `", lhs, "`. RHS: ",

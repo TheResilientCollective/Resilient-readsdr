@@ -148,3 +148,44 @@ test_that("stc_vars_DELAYN() returns the expected list", {
 
   expect_equal(actual, expected)
 })
+
+# translate_previous -----------------------------------------------------------
+
+test_that("translate_previous works", {
+  mdl_text <- '<root>
+      <doc1 xmlns = "http://docs.oasis-open.org/xmile/ns/XMILE/v1.0">
+        <header>
+		      <vendor>isee systems, inc.</vendor>
+		    </header>
+	      <sim_specs>
+	        <start>0</start>
+		      <stop>4</stop>
+		      <dt reciprocal="true">1</dt>
+	      </sim_specs>
+	   	  <variables>
+			    <stock name="population">
+				    <eqn>100</eqn>
+				    <inflow>net_growth</inflow>
+			    </stock>
+			    <flow name="net growth">
+				    <eqn>population * growth_rate</eqn>
+			    </flow>
+			    <aux name="growth rate">
+				    <eqn>PREVIOUS(SELF, 0.1) + 0.01</eqn>
+			    </aux>
+        </variables>
+      </doc1>
+    </root>'
+
+  ds_comp <- xmile_to_deSolve(mdl_text)
+
+  output  <- sd_simulate(ds_comp, integ_method = "euler", start_time = 0,
+                         stop_time = 3, timestep = 1)
+
+  actual  <- output$growth_rate
+
+  expected <- c(0.11, 0.12, 0.13, 0.14)
+
+  expect_equal(actual, expected)
+})
+
