@@ -92,6 +92,8 @@ classify_elems <- function(aux_xml, vendor, dims_obj) {
 
   is_arrayed <- ifelse(n_dims > 0, TRUE, FALSE)
 
+  elems <- list()
+
   if(!is_arrayed) {
 
     equation_xml <- xml2::xml_find_first(aux_xml, ".//d1:eqn")
@@ -153,40 +155,31 @@ classify_elems <- function(aux_xml, vendor, dims_obj) {
   non_const_list      <- Map(list, var_names[!are_const], equations[!are_const])
   non_const_list      <- unname(non_const_list)
 
-  if(length(non_const_list) == 4) {
-    pattern1 <- stringr::regex("\\(Severity==Severity.Asymptomatic\\)", dotall = TRUE, ignore_case = TRUE)
-    equation <- non_const_list[[1]][[2]]
-    there_is_p1 <- stringr::str_detect(equation, pattern1)
-    if(there_is_p1){
-     for(i in 1:4){
-      non_const_list[[i]][[2]] <- stringr::str_replace(non_const_list[[i]][[2]], pattern1, ifelse(i==1,"TRUE","FALSE"))
-     }
-    }
-    pattern1 <- stringr::regex("\\(Severity==Severity.Mild\\)", dotall = TRUE, ignore_case = TRUE)
-    equation <- non_const_list[[1]][[2]]
-    there_is_p1 <- stringr::str_detect(equation, pattern1)
-    if(there_is_p1){
-     for(i in 1:4){
-      non_const_list[[i]][[2]] <- stringr::str_replace(non_const_list[[i]][[2]], pattern1, ifelse(i==2,"TRUE","FALSE"))
-     }
-    }
-    pattern1 <- stringr::regex("\\(Severity==Severity.Moderate\\)", dotall = TRUE, ignore_case = TRUE)
-    equation <- non_const_list[[1]][[2]]
-    there_is_p1 <- stringr::str_detect(equation, pattern1)
-    if(there_is_p1){
-     for(i in 1:4){
-      non_const_list[[i]][[2]] <- stringr::str_replace(non_const_list[[i]][[2]], pattern1, ifelse(i==3,"TRUE","FALSE"))
-     }
-    }
-    pattern1 <- stringr::regex("\\(Severity==Severity.Severe\\)", dotall = TRUE, ignore_case = TRUE)
-    equation <- non_const_list[[1]][[2]]
-    there_is_p1 <- stringr::str_detect(equation, pattern1)
-    if(there_is_p1){
-     for(i in 1:4){
-      non_const_list[[i]][[2]] <- stringr::str_replace(non_const_list[[i]][[2]], pattern1, ifelse(i==4,"TRUE","FALSE"))
-     }
+  if (length(non_const_list) > 0) {
+    # Find explict dimension checks of the form Dimension==Dimension.Index
+    # and replace with TRUE or FALSE, depending on the index
+    for (dimx in dimensions) {
+      dim_name <- xml2::xml_attr(dimx, "name")
+      pat <- stringr::regex(
+        paste0("", dim_name,"==", dim_name, "\\.(",
+               paste(dims_obj$global_dims[[dim_name]], collapse="|"), ")"
+        ),
+        ignore_case=TRUE
+      )
+      for (i in seq_along(elems)) {
+        match <- stringr::str_match(non_const_list[[i]][[2]], pat)
+        if (any(is.na(match))) {
+          next
+        }
+        non_const_list[[i]][[2]] <- stringr::str_replace(
+          non_const_list[[i]][[2]],
+          match[[1]],
+          ifelse(match[[2]] == elems[[i]], "TRUE", "FALSE")
+        )
+      }
     }
   }
+
   list(consts     = consts,
        non_consts = list(elems    = non_const_list,
                          aux_name = aux_name))
