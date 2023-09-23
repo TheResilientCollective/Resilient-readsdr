@@ -1,5 +1,7 @@
 translate_stat_funs <- function(equation, vendor) {
-  translate_NORMAL(equation, vendor)
+  new_equation <- translate_NORMAL(equation, vendor)
+  new_equation <- translate_GAMMA(new_equation, vendor)
+  translate_LOGNORMAL(new_equation, vendor)
 }
 
 translate_NORMAL <- function(equation, vendor) {
@@ -62,3 +64,80 @@ translate_NORMAL <- function(equation, vendor) {
   new_equation
 }
 
+translate_GAMMA <- function(equation, vendor) {
+  if(vendor != "isee") {
+    return(equation)
+  }
+
+  detection_pattern <- "\\bGAMMA\\b"
+  pattern_found     <- stringr::str_detect(equation, detection_pattern)
+
+  if(!pattern_found) {
+    return(equation)
+  }
+
+  extracted_call <- extract_function_call(equation, "GAMMA")
+  if (all(is.na(extracted_call))) {
+    stop(paste("ERROR Parsing GAMMA function call in:", equation))
+  }
+  args_list <- stringr::str_split(extracted_call$args, ",")[[1]]
+
+  if (length(args_list) > 3) {
+    # NOTE: this can't handle commas inside function calls!  So, e.g.,
+    #       you can't do `GAMMA(shape, f(x1,x2,x3))`
+    stop("Expected GAMMA to be called with 1-3 arguments!")
+  }
+
+  if (length(args_list) == 3) {
+    warning(paste("Ignoring seed argument to GAMMA function:",
+                  extracted_call$match))
+  }
+
+  gamma_shape <- args_list[1]
+  if (length(args_list) > 1) {
+    gamma_scale <- args_list[2]
+  } else {
+    gamma_scale <- 1
+  }
+
+  repl <- stringr::str_glue("rgamma(1, {gamma_shape}, scale={gamma_scale})")
+
+  stringr::str_replace(equation, stringr::fixed(extracted_call$match), repl)
+}
+
+translate_LOGNORMAL <- function(equation, vendor) {
+  if(vendor != "isee") {
+    return(equation)
+  }
+
+  detection_pattern <- "\\bLOGNORMAL\\b"
+  pattern_found     <- stringr::str_detect(equation, detection_pattern)
+
+  if(!pattern_found) {
+    return(equation)
+  }
+
+  extracted_call <- extract_function_call(equation, "LOGNORMAL")
+  if (all(is.na(extracted_call))) {
+    stop(paste("ERROR Parsing LOGNORMAL function call in:", equation))
+  }
+  args_list <- stringr::str_split(extracted_call$args, ",")[[1]]
+
+  if ((length(args_list) < 2) || (length(args_list) > 3)) {
+    # NOTE: this can't handle commas inside function calls!  So, e.g.,
+    #       you can't do `LOGNORMAL(shape, f(x1,x2,x3))`
+    stop("Expected LOGNORMAL to be called with 2-3 arguments!")
+  }
+
+  if (length(args_list) == 3) {
+    warning(paste("Ignoring seed argument to LOGNORMAL function:",
+                  extracted_call$match))
+  }
+
+  mean <- args_list[1]
+  sd <- args_list[2]
+
+  repl <- stringr::str_glue("rlnorm(1, log({mean}), {sd}*{sd})")
+
+  stringr::str_replace(equation, stringr::fixed(extracted_call$match), repl)
+}
