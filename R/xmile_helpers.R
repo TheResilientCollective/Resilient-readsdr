@@ -216,9 +216,9 @@ sanitise_aux_equation <- function(equation, vendor) {
     stringr::str_replace_all("\\{.*?\\}", "") %>%  # removes commentaries
     translate_extrema() %>%
     translate_math_funs() %>%
+    translate_comparison_operators() %>%
     translate_stat_funs(vendor) %>%
     translate_logical_operators(vendor) %>%
-    translate_comparison_operators() %>%
     translate_time_builtins() %>%
     eval_constant_expr() # Must go at the end
 }
