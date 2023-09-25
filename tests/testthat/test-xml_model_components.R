@@ -86,7 +86,8 @@ test_that("create_level_obj_xmile() returns the expected object", {
 
   level_obj    <- create_level_obj_xmile(test_stocks_xml,
                                          test_vars, test_consts,
-                                         time_aux = time_aux)
+                                         time_aux = time_aux,
+                                         dims_obj = NULL)
   actual_val   <- level_obj[[1]]
   expected_val <- list(name = "Population",
                        equation = "netGrowth",
@@ -115,7 +116,8 @@ test_that("create_level_obj_xmile() deals with levels with no flows", {
 
   level_obj    <- create_level_obj_xmile(test_stocks_xml,
                                          test_vars, test_consts,
-                                         time_aux = time_aux)
+                                         time_aux = time_aux,
+                                         dims_obj = NULL)
   actual_obj   <- level_obj[[1]]
 
   expected_obj <- list(name = "Population",
@@ -155,7 +157,8 @@ test_that("create_level_obj_xmile() works should levels depend on other levels i
 
   actual_obj    <- create_level_obj_xmile(test_stocks_xml,
                                          test_vars, test_consts,
-                                         time_aux = time_aux)
+                                         time_aux = time_aux,
+                                         dims_obj = NULL)
   expected_obj <- list(
     list(name      = "pop1",
          equation  = "net_change_1",
@@ -202,7 +205,8 @@ test_that("create_level_obj_xmile() returns the expected object in the presence 
 
   level_obj    <- create_level_obj_xmile(test_stocks_xml,
                                          test_vars, test_consts,
-                                         time_aux = time_aux)
+                                         time_aux = time_aux,
+                                         dims_obj = NULL)
   actual_val   <- level_obj[[1]]
   expected_val <- list(name = "Population",
                        equation = "births-emigration-deaths",
@@ -242,7 +246,8 @@ test_that("create_level_obj_xmile() returns the expected object in the presence 
 
   level_obj    <- create_level_obj_xmile(test_stocks_xml,
                                          test_vars, test_consts,
-                                         time_aux = time_aux)
+                                         time_aux = time_aux,
+                                         dims_obj = NULL)
   actual_val   <- level_obj[[1]]
   expected_val <- list(name = "Population",
                        equation = "births+immigration-deaths",
@@ -279,7 +284,10 @@ test_that("create_level_obj_xmile() throws an error when there are no stocks", {
     list(name = "var2",
          value = "30"))
 
-  expect_error(create_level_obj_xmile(test_stocks_xml, test_vars, test_consts))
+  expect_error(create_level_obj_xmile(test_stocks_xml,
+                                      test_vars,
+                                      test_consts,
+                                      dims_obj = NULL))
 })
 
 test_that("create_level_obj_xmile() takes into account builtin stocks", {
@@ -305,7 +313,8 @@ test_that("create_level_obj_xmile() takes into account builtin stocks", {
 
   actual_val      <- create_level_obj_xmile(test_stocks_xml, variables,
                                             constants, builtin_stocks,
-                                            time_aux = time_aux)
+                                            time_aux = time_aux,
+                                            dims_obj = NULL)
 
   expected_val <- list(name      = "S1",
                        equation  = "adjust_S1",
@@ -404,8 +413,12 @@ test_that("create_level_obj_xmile() handles DELAY FIXED from Vensim", {
   time_aux   <- list(name     = "time",
                      equation = 0)
 
-  actual_obj <- create_level_obj_xmile(test_stocks_xml, test_vars, test_consts,
-                                       time_aux = time_aux, vendor = "Vensim")
+  actual_obj <- create_level_obj_xmile(test_stocks_xml,
+                                       test_vars,
+                                       test_consts,
+                                       time_aux = time_aux,
+                                       vendor = "Vensim",
+                                       dims_obj = NULL)
 
   expect_equal(actual_obj, expected_obj)
 })
@@ -429,8 +442,12 @@ test_that("create_level_obj_xmile() handles step function in init value", {
   time_aux   <- list(name     = "time",
                      equation = 0)
 
-  actual_obj <- create_level_obj_xmile(stocks_xml, variables, constants,
-                                       builtin_stocks, time_aux = time_aux)
+  actual_obj <- create_level_obj_xmile(stocks_xml,
+                                       variables,
+                                       constants,
+                                       builtin_stocks,
+                                       time_aux = time_aux,
+                                       dims_obj = NULL)
 
   expected_obj <- list(list(name      = "smoothed_step",
                             equation  = "adjust_smoothed_step",
@@ -559,6 +576,74 @@ test_that("extract_stock_info() handles vectorised init values", {
     list(name      = "S_D",
          equation  = "-S_to_E_D",
          initValue = "N_D-I_D"))
+
+  expect_equal(actual_obj, expected_obj)
+})
+
+test_that("extract_stock_info() sums dimensions for array inflow to scalar stock", {
+  test_stocks_xml <- xml2::read_xml('
+  <root>
+    <doc1 xmlns = "http://docs.oasis-open.org/xmile/ns/XMILE/v1.0">
+      <variables>
+        <stock name="STK">
+				  <eqn>100</eqn>
+				  <inflow>FLW</inflow>
+			  </stock>
+      </variables>
+    </doc1>
+  </root>') %>%
+    xml2::xml_find_all(".//d1:stock")
+
+  dims_obj <- list(
+    dictionary=list(
+      FLW=c("A", "B")
+    ),
+    global_dims=list(
+      A=c("A1", "A2"),
+      B=c("B1", "B2", "B3")
+    )
+  )
+
+  actual_obj <- extract_stock_info(test_stocks_xml, dims_obj, "isee")
+  expected_obj <- list(
+    list(name      = "STK",
+         equation  = paste0("FLW_A1_B1+FLW_A1_B2+FLW_A1_B3+",
+                            "FLW_A2_B1+FLW_A2_B2+FLW_A2_B3"),
+         initValue = "100"))
+
+  expect_equal(actual_obj, expected_obj)
+})
+
+test_that("extract_stock_info() sums dimensions for array outflow from scalar stock", {
+  test_stocks_xml <- xml2::read_xml('
+  <root>
+    <doc1 xmlns = "http://docs.oasis-open.org/xmile/ns/XMILE/v1.0">
+      <variables>
+        <stock name="STK">
+				  <eqn>100</eqn>
+				  <outflow>FLW</outflow>
+			  </stock>
+      </variables>
+    </doc1>
+  </root>') %>%
+    xml2::xml_find_all(".//d1:stock")
+
+  dims_obj <- list(
+    dictionary=list(
+      FLW=c("A", "B")
+    ),
+    global_dims=list(
+      A=c("A1", "A2"),
+      B=c("B1", "B2", "B3")
+    )
+  )
+
+  actual_obj <- extract_stock_info(test_stocks_xml, dims_obj, "isee")
+  expected_obj <- list(
+    list(name      = "STK",
+         equation  = paste0("-FLW_A1_B1-FLW_A1_B2-FLW_A1_B3",
+                            "-FLW_A2_B1-FLW_A2_B2-FLW_A2_B3"),
+         initValue = "100"))
 
   expect_equal(actual_obj, expected_obj)
 })

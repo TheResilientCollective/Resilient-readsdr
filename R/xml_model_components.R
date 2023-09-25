@@ -142,10 +142,13 @@ extract_stock_info <- function(stock_xml, dims_obj, vendor) {
 
   if(n_inflow > 0L) {
 
-    inflow_list <- list(inflow_vctr)
-
     if(is_arrayed) {
       inflow_list <- lapply(elems, function(s) paste(inflow_vctr, s, sep = "_"))
+    } else {
+      inflow_list <- list(sapply(
+        inflow_vctr,
+        function(inflow) expand_dimensions(inflow, dims_obj)
+      ))
     }
 
     text_inflow  <- sapply(inflow_list, function(inflows) paste(inflows,
@@ -159,10 +162,13 @@ extract_stock_info <- function(stock_xml, dims_obj, vendor) {
 
   if(n_outflow > 0L) {
 
-    outflow_list <- list(outflow_vctr)
-
     if(is_arrayed) {
       outflow_list <- lapply(elems, function(s) paste(outflow_vctr, s, sep = "_"))
+    } else {
+      outflow_list <- list(sapply(
+        outflow_vctr,
+        function(outflow) expand_dimensions(outflow, dims_obj)
+      ))
     }
 
     text_outflow  <- sapply(outflow_list, function(outflows) {

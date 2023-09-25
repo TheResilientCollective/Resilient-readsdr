@@ -117,3 +117,27 @@ create_array_pattern <- function(dims_list) {
   rgx_array
 
 }
+
+#' Expand a variable on it's dimensions.
+#'
+#' If the variable has dimensions, return a list of new variables expanded on
+#' the dimensions.
+#'
+#' It is assumed that `dims_obj` contains
+#' - `dictionary` which maps variables to lists of dimension names
+#' - `global_dims` which maps dimension names to dimenion elements/categories
+#'
+#' @param var_name name of a variable (\emph{flow}, \emph{aux}, etc)
+#' @param dims_obj object describing model dimensions
+#' @returns list of expanded variable names, one for each combo of dimensions
+#'
+expand_dimensions <- function(var_name, dims_obj) {
+  if (is.null(dims_obj) || !(var_name %in% names(dims_obj$dictionary))) {
+    return(list(var_name))
+  }
+
+  dim_names <- dims_obj$dictionary[[var_name]]
+  dims_list <- lapply(dim_names,
+                      function(dim_name) dims_obj$global_dims[[dim_name]])
+  lapply(combine_dims(dims_list), function(d) paste(var_name, d, sep="_"))
+}
