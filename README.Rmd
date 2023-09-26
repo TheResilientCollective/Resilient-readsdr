@@ -12,7 +12,7 @@ knitr::opts_chunk$set(
   out.width = "100%"
 )
 ```
-# readsdr
+# Resilient-readsdr
 
 <!-- badges: start -->
 [![Codecov test
@@ -20,6 +20,9 @@ coverage](https://codecov.io/gh/jandraor/readsdr/branch/master/graph/badge.svg)]
 [![CRAN status](https://www.r-pkg.org/badges/version/readsdr)](https://CRAN.R-project.org/package=readsdr)
 [![R-CMD-check](https://github.com/jandraor/readsdr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/jandraor/readsdr/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
+
+This is a fork of `jandraor/readsdr` that is customized for the Resilient 
+Collectives dynamic system models.
 
 ## Overview
 
@@ -33,20 +36,29 @@ construct [networks](https://igraph.org) (graph theory), ODE functions for
 
 ## Installation
 
+<!--
 You can install the released version of readsdr from [CRAN](https://CRAN.R-project.org) with:
 
 ``` r
 install.packages("readsdr")
 ```
 
-And the development version from [GitHub](https://github.com/) with:
+And--> 
+---
 
+You can install the development version from [GitHub](https://github.com/) with:
 
+``` r
+# install.packages("devtools")
+devtools::install_github("TheResilientCollective/Resilient-readsdr")
+```
+
+<!--
 ``` r
 # install.packages("devtools")
 devtools::install_github("jandraor/readsdr")
 ```
-
+-->
 ## Usage
 
 ```{r example}
