@@ -96,6 +96,17 @@ create_level_obj_xmile <- function(stocks_xml, variables, constants,
     stocks_list <- c(builtin_stocks, stocks_list)
   }
 
+  stock_vars <- intersect(sapply(variables, function(v) v$name),
+                          sapply(stocks_list, function(s) s$name))
+  if (length(stock_vars)) {
+    stop(
+      paste0(
+        "Variable and stock naming conflict: ",
+        paste(stock_vars, collapse=", ")
+      )
+    )
+  }
+
   stock_auxs <- lapply(stocks_list, function(stock) {
     list(name = stock$name, equation = stock$initValue)
   })
@@ -112,6 +123,10 @@ extract_stock_info <- function(stock_xml, dims_obj, vendor) {
   eq <- xml2::xml_find_all(stock_xml, ".//d1:eqn")
   eq <- xml2::xml_text(eq)
   if(any(grepl("DELAY_FIXED|DELAY_N", eq))) return (NULL)
+  #-----------------------------------------------------------------------------
+
+  # Conveyors use built-in stocks and overwrite the stock name with a variable
+  if(length(xml2::xml_find_first(stock_xml, ".//d1:conveyor")) > 0) return(NULL)
   #-----------------------------------------------------------------------------
 
   dim_xml     <- xml2::xml_find_all(stock_xml, ".//d1:dimensions")
@@ -144,15 +159,16 @@ extract_stock_info <- function(stock_xml, dims_obj, vendor) {
 
     if(is_arrayed) {
       inflow_list <- lapply(elems, function(s) paste(inflow_vctr, s, sep = "_"))
+      text_inflow  <- sapply(inflow_list, function(inflows) paste(inflows,
+                                                                  collapse = "+"))
     } else {
-      inflow_list <- list(sapply(
+      expanded_list <- unlist(sapply(
         inflow_vctr,
         function(inflow) expand_dimensions(inflow, dims_obj)
       ))
+      text_inflow  <- paste(expanded_list, collapse = "+")
     }
 
-    text_inflow  <- sapply(inflow_list, function(inflows) paste(inflows,
-                                                                collapse = "+"))
   }
 
   outflow_vctr <- stock_xml %>% xml2::xml_find_all(".//d1:outflow") %>%
@@ -162,19 +178,23 @@ extract_stock_info <- function(stock_xml, dims_obj, vendor) {
 
   if(n_outflow > 0L) {
 
-    if(is_arrayed) {
+    if (is_arrayed) {
       outflow_list <- lapply(elems, function(s) paste(outflow_vctr, s, sep = "_"))
+      text_outflow  <- sapply(outflow_list, function(outflows) {
+        paste0("-", outflows) %>% paste(collapse = "")
+      })
     } else {
-      outflow_list <- list(sapply(
-        outflow_vctr,
-        function(outflow) expand_dimensions(outflow, dims_obj)
-      ))
+      # scalar -> array goes out to all...
+      dmx <- dimension_extensions(dims_obj)
+      text_outflow <- tibble::tibble(name=outflow_vctr) %>%
+        dplyr::left_join(dmx, by="name") %>%
+        tidyr::unite(name, name, ext, sep="_", na.rm=TRUE) %>%
+        dplyr::group_by() %>%
+        dplyr::summarize(name = paste(name, collapse=" - ")) %>%
+        dplyr::ungroup() %>%
+        dplyr::mutate(name=paste(" - ", name)) %>%
+        dplyr::pull(name)
     }
-
-    text_outflow  <- sapply(outflow_list, function(outflows) {
-      paste0("-", outflows) %>% paste(collapse = "")
-    })
-
   }
 
   if(n_inflow > 0L && n_outflow > 0L) {
