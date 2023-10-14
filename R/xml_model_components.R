@@ -114,7 +114,35 @@ create_level_obj_xmile <- function(stocks_xml, variables, constants,
   auxs        <- c(variables, constants, stock_auxs, list(time_aux))
   stocks_list <- lapply(stocks_list, get_init_value, auxs, fixed_inits)
 
+  non_negative_stocks <- stocks_xml %>%
+    xml2::xml_find_all("./d1:non_negative") %>%
+    xml2::xml_parent() %>%
+    xml2::xml_attr("name") %>%
+    sanitise_elem_name()
+
+  stocks_list <- lapply(
+    stocks_list,
+    function(stk) add_non_negative_check(stk, non_negative_stocks)
+  )
+
   stocks_list
+}
+
+#' Check that stocks which are supposed to be non-negative remain so
+#'
+#' This will just alert us if we have a problem.  To actually ensure
+#' that stocks remain non-negative requires wrapping all outflows.  Currently
+#' there does not seem to be a need for that so I'm putting it off.
+add_non_negative_check <- function(stock_obj, nn_stocks) {
+  if (!(stock_obj$name %in% nn_stocks)) {
+    return (stock_obj)
+  }
+
+  stock_obj$equation <- with(stock_obj, stringr::str_glue(
+    'ifelse(({name} + {equation}) < 0, stop("Negative value in {name}!"), {equation})'
+  ))
+
+  stock_obj
 }
 
 extract_stock_info <- function(stock_xml, dims_obj, vendor) {
