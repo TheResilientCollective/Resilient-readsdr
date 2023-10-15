@@ -79,7 +79,6 @@ array_equations <- function(aux_obj, dims_obj, dim_names, vendor) {
        elems      = elems)
 }
 
-
 devectorise_equation <- function(raw_equation, dims_list) {
 
   dim_names   <- names(dims_list)
@@ -132,12 +131,74 @@ create_array_pattern <- function(dims_list) {
 #' @returns list of expanded variable names, one for each combo of dimensions
 #'
 expand_dimensions <- function(var_name, dims_obj) {
-  if (is.null(dims_obj) || !(var_name %in% names(dims_obj$dictionary))) {
-    return(list(var_name))
-  }
+  res <- lapply(var_name, list)
+  calc_idx <- var_name %in% names(dims_obj$dictionary)
 
-  dim_names <- dims_obj$dictionary[[var_name]]
+  dim_names <- dims_obj$dictionary[var_name[calc_idx]]
   dims_list <- lapply(dim_names,
                       function(dim_name) dims_obj$global_dims[[dim_name]])
-  lapply(combine_dims(dims_list), function(d) paste(var_name, d, sep="_"))
+  res[calc_idx] <- lapply(
+    var_name[calc_idx],
+    function(vn) lapply(
+      combine_dims(dims_list[vn]),
+      function(d) paste(vn, d, sep="_")))
+
+  res
+}
+
+#' Generate a full data frame with dimensions for all dimensional variables
+#'
+#' This is a table with columns:
+#' - name: the sanitized name of one variable (stock, flow, aux)
+#' - dimension.1: the name of the first dimension (NA if non-dimensional)
+#' - elem.1: name of the element for dimension 1
+#' - ...
+#'
+#' There are enough dimension.n and elem.n columns to cover the highest-
+#' dimensional variable.  There is one row for each combination of dimensional
+#' elements for each variable.
+#'
+#' @param dims_obj Dimension dictionary
+#' @returns tibble with columns defined as above
+#'
+dimension_tibble <- function(dims_obj) {
+  maxdims <- max(sapply(dims_obj$dictionary, length))
+  gdims <- tibble::as_tibble(
+    list(dimension=names(dims_obj$global_dims), elem=dims_obj$global_dims)
+  ) %>%
+    tidyr::unnest(elem)
+
+  vdims <- tibble::as_tibble(
+    list(name=names(dims_obj$dictionary), dimension=dims_obj$dictionary)
+  ) %>%
+    tidyr::unnest_wider(dimension, names_sep=".")
+
+
+  # I know there's a better way to do this...
+  for (idx in 1:maxdims) {
+    #dimcol <- paste("dimension", idx, sep=".")
+    dim_map <- setNames(c("dimension"), paste("dimension", idx, sep="."))
+    elcol <- paste("elem", idx, sep=".")
+    vdims <- vdims %>%
+      dplyr::left_join(gdims,
+                       by=dim_map,
+                       relationship="many-to-many") %>%
+      dplyr::rename(!!elcol:=elem)
+
+  }
+  vdims
+}
+
+#' Simple map of sanitized name to all extensions (enumerated dimensions)
+#'
+dimension_extensions <- function(dims_obj = NA, dims_tibble = NA) {
+  if (is.na(dims_tibble) && is.na(dims_obj)) {
+    stop("dimension_extensions -- Need one of dims_obj or dims_tibble!")
+  }
+  if (is.na(dims_tibble)) {
+    dims_tibble <- dimension_tibble(dims_obj)
+  }
+  dims_tibble %>%
+    tidyr::unite(ext, starts_with("elem."), sep="_", na.rm=TRUE) %>%
+    dplyr::select(name, ext)
 }

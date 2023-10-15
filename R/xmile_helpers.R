@@ -36,6 +36,13 @@ extract_structure_from_XMILE <- function(filepath, inits_vector = NULL,
                                               inits_vector)
   }
 
+  vars_and_consts <- expand_conveyors(variables_xml,
+                                      vars_and_consts,
+                                      parameters$dt,
+                                      dims_obj,
+                                      inits_vector,
+                                      vendor)
+
   variables       <- arrange_variables(vars_and_consts$variables)
   constants       <- vars_and_consts$constants
 

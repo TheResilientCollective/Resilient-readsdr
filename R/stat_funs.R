@@ -134,10 +134,10 @@ translate_LOGNORMAL <- function(equation, vendor) {
                   extracted_call$match))
   }
 
-  mean <- args_list[1]
-  sd <- args_list[2]
+  mean_val <- args_list[1]
+  sd_val <- args_list[2]
 
-  repl <- stringr::str_glue("rlnorm(1, log({mean}), {sd}*{sd})")
+  repl <- stringr::str_glue("rlnorm(1, log({mean_val}), {sd_val}*{sd_val})")
 
   stringr::str_replace(equation, stringr::fixed(extracted_call$match), repl)
 }
