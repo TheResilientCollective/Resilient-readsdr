@@ -60,7 +60,7 @@ create_vars_consts_obj_xmile <- function(auxs_xml, vendor, dims_obj = NULL,
 
   vars           <- lapply(interpreted_nc, function(obj) obj$vars)
   vars           <- remove_NULL(vars)
-  vars           <- ensure_non_negative(unlist(vars, recursive = FALSE), auxs_xml)
+  vars           <- unlist(vars, recursive = FALSE)
 
   builtin_stocks <- lapply(interpreted_nc, function(obj) obj$builtin_stocks)
   builtin_stocks <- unlist(builtin_stocks, recursive = FALSE)
@@ -74,32 +74,6 @@ create_vars_consts_obj_xmile <- function(auxs_xml, vendor, dims_obj = NULL,
   }
 
   vars_consts_obj
-}
-
-#' Find all variables with non_negative tag and wrap equation with pmax(0,.)
-#'
-#' NOTE: this is enough to ensure non negative flows and auxiliaries, but will
-#'       not guarantee non negative stocks.
-#'
-#' @param vars List of variable names and equations
-#' @param auxs_xml XML nodeset with all of the auxs used to create the vars list
-#' @returns a modified version of vars list with the pmax wrappers where needed
-ensure_non_negative <- function(vars, auxs_xml) {
-  non_negative_auxs <- auxs_xml %>%
-    xml2::xml_find_all("./d1:non_negative") %>%
-    xml2::xml_parent() %>%
-    xml2::xml_attr("name") %>%
-    sanitise_elem_name() %>%
-    tibble::tibble(name=., is_nn=TRUE)
-
-  do.call(rbind, lapply(vars, data.frame)) %>%
-    dplyr::left_join(non_negative_auxs, by="name") %>%
-    dplyr::mutate(equation = ifelse(
-      is.na(is_nn), equation,
-      stringr::str_glue("pmax(0, {equation})"))
-    ) %>%
-    dplyr::select(c(name, equation)) %>%
-    dynutils::tibble_as_list()
 }
 
 classify_elems <- function(aux_xml, vendor, dims_obj) {

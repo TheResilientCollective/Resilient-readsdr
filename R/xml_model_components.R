@@ -133,6 +133,10 @@ create_level_obj_xmile <- function(stocks_xml, variables, constants,
 #' This will just alert us if we have a problem.  To actually ensure
 #' that stocks remain non-negative requires wrapping all outflows.  Currently
 #' there does not seem to be a need for that so I'm putting it off.
+#'
+#' @param stock_obj List with `name` and `equation` describing one stock
+#' @param nn_stocks Vector of non negative stock names
+#' @returns equation wrapped in a check for negativity
 add_non_negative_check <- function(stock_obj, nn_stocks) {
   if (!(stock_obj$name %in% nn_stocks)) {
     return (stock_obj)
@@ -154,7 +158,7 @@ extract_stock_info <- function(stock_xml, dims_obj, vendor) {
   #-----------------------------------------------------------------------------
 
   # Conveyors use built-in stocks and overwrite the stock name with a variable
-  if(length(xml2::xml_find_first(stock_xml, ".//d1:conveyor")) > 0) return(NULL)
+  if(length(xml2::xml_find_all(stock_xml, ".//d1:conveyor")) > 0) return(NULL)
   #-----------------------------------------------------------------------------
 
   dim_xml     <- xml2::xml_find_all(stock_xml, ".//d1:dimensions")
@@ -183,6 +187,8 @@ extract_stock_info <- function(stock_xml, dims_obj, vendor) {
 
   n_inflow    <- length(inflow_vctr)
 
+  dmx <- dimension_extensions(dims_obj)
+
   if(n_inflow > 0L) {
 
     if(is_arrayed) {
@@ -190,11 +196,13 @@ extract_stock_info <- function(stock_xml, dims_obj, vendor) {
       text_inflow  <- sapply(inflow_list, function(inflows) paste(inflows,
                                                                   collapse = "+"))
     } else {
-      expanded_list <- unlist(sapply(
-        inflow_vctr,
-        function(inflow) expand_dimensions(inflow, dims_obj)
-      ))
-      text_inflow  <- paste(expanded_list, collapse = "+")
+      # array -> scalar sums across dimensions
+      # scalar -> array goes out to all...
+      text_inflow <- tibble::tibble(name=inflow_vctr) %>%
+        dplyr::left_join(dmx, by="name") %>%
+        tidyr::unite(name, name, ext, sep="_", na.rm=TRUE) %>%
+        dplyr::summarize(name = paste(name, collapse="+")) %>%
+        dplyr::pull(name)
     }
 
   }
@@ -213,14 +221,11 @@ extract_stock_info <- function(stock_xml, dims_obj, vendor) {
       })
     } else {
       # scalar -> array goes out to all...
-      dmx <- dimension_extensions(dims_obj)
       text_outflow <- tibble::tibble(name=outflow_vctr) %>%
         dplyr::left_join(dmx, by="name") %>%
         tidyr::unite(name, name, ext, sep="_", na.rm=TRUE) %>%
-        dplyr::group_by() %>%
-        dplyr::summarize(name = paste(name, collapse=" - ")) %>%
-        dplyr::ungroup() %>%
-        dplyr::mutate(name=paste(" - ", name)) %>%
+        dplyr::summarize(name = paste(name, collapse="-")) %>%
+        dplyr::mutate(name=paste0("-", name)) %>%
         dplyr::pull(name)
     }
   }

@@ -18,8 +18,12 @@
 #'   - is_leak: boolean indicating whether the flow is a leak
 #'   - spread_source: flow spreads from upstream to downstream conveyor slats
 #'   - spread_even: flow spreads evenly into downstream conveyor slats
-#'   - from_conveyor: sanitized name of conveyor this flows from IF true
+#'   - flows_from: sanitized name of conveyor this flows from or NA if none
+#'   - flows_to: sanitized name of conveyor this flows to or NA if none
 #'
+#' @param vars_xml xml "variables" node to search under
+#' @param vendor we only handle isee systems here
+#' @returns list of dataframes describing conveyors and connected flows
 extract_conveyor_info <- function(vars_xml, vendor) {
   conveyors_xml <-  vars_xml %>%
     xml2::xml_find_all(".//d1:stock[./d1:conveyor]")
@@ -120,20 +124,22 @@ extract_conveyor_info <- function(vars_xml, vendor) {
 #' @param dt simulation fractional time step
 #' @param dims_obj dimensions object used to split arrayed stocks
 #' @param inits_vector initialization overrides passed to compute_init_value
-#' @param vendor isee or vensim (only tested for isee)
+#' @param vendor isee or vensim (only supporting isee)
+#'
+#' @returns modified list of vars and consts
 expand_conveyors <- function(vars_xml,
                              v_and_c,
                              dt,
                              dims_obj,
                              inits_vector,
                              vendor) {
-  if (vendor != "isee") {
-    stop("Conveyor expansion only supported for isee systems (Stella)")
-  }
-
   cvy_info = extract_conveyor_info(vars_xml, vendor)
   if (length(cvy_info$conveyors) == 0) {
-    return()
+    return(v_and_c)
+  }
+
+  if (vendor != "isee") {
+    stop("Conveyor expansion only supported for isee systems (Stella)")
   }
 
   # Parameters we need to pass through to other methods.  I'm trying to
@@ -180,41 +186,24 @@ expand_conveyors <- function(vars_xml,
 #' one for each slat.  These are lists with:
 #' - name: built as "{conveyor_name}_slat_{slat_number}"
 #' - equation: this is the equation that goes into differential calculation!
-#' - initValue: initial value of slat is X/(DT*len), where X is conveyor eqn
+#' - initValue: initial value distributed over slats (see below)
 #'
 #' Additionally, internal vector variables are used to keep track of per-slat
 #' leakage, and those are summed into the scalar flow variables which may be
 #' referenced downstream.  For the special case of downstream conveyors, the
 #' vector version is used.
 #'
-#' I am 100% sure this could be done more efficiently and cleanly.  I started
-#' to move over to a vectorized version (thus all the use of tidyr), but that's
-#' a bigger task than I have time for!
 #'
-#' In Stella, initial values are NOT evenly spread among the slots.  They are
-#' placed in such a way that they emulate a steady state (a constant outflow),
-#' given the existing leakages.
-#'
-#' Call SN the initial value in slat N (in 1...M), and LF be leak fraction.  If
-#' there were a steady inflow of INF, the value in slot SN would be
-#'
-#' SN = INF (1-LF)^(M-N)
-#'
-#' Here I take the value BEFORE leakage is removed because leakage is calculated
-#' first before outflow.  Also M is transit time / DT.
-#'
-#' We initialize the conveyor with value init = sum_N(SN)
-#' init = sum(INF (1-LF)^(M-N))
-#'      = INF sum((1-LF)^(M-N)
-#'  INF = init/sum((1-LF)^(M-N))
-#'
-#' Which gives us our initial vector.
+#' ## Limitations
+#' - we assume that all lengths are constant over the sim
+#'   - handling variable transit times is much more complicated
+#' - initial slat values hardcoded for the one conveyor with nonzero init
+#' - right now, only partially vectorized (thus the mixture of tidyr and lists)
 #'
 #' @param conveyor_name sanitized name of the conveyor stock
 #' @param cvy_parms list of useful parameters
 #' @returns list with builtin_stocks and variables to be added
-expand_one_conveyor <- function(conveyor_name,
-                                cvy_parms) {
+expand_one_conveyor <- function(conveyor_name, cvy_parms) {
 
   df_c <- cvy_parms$cvy_info$conveyors %>%
     dplyr::filter(name==conveyor_name)
@@ -244,51 +233,6 @@ expand_one_conveyor <- function(conveyor_name,
     }
   ))
 
-  # TODO: should put a check in here that all lengths are constant over the sim
-  # Handling variable transit times is more complicated
-
-  # calculate initial value in slats, and paste with space-separators
-  # This is super complicated.  I'm going to just hardcode the leakage fractions
-  # for the one inital-value conveyor we have.  For this guy we have two leaks.
-  #
-  # With 2 leaks, we have INF(1-LF1) left after the first leak, then
-  # INF(1-LF1)(1-LF2) after the second.  Let R1 = 1-LF1 and R2 = 1-LF2,
-  # then
-  # Si = (R1 R2)^(M-i)/sum((R1 R2)^(M-N))
-  #
-  # The first has fraction based on dimension ("Mild" -> 0.0188, else 0.075).
-  # The second is time varying, but starts at X-0.000001*17.8, where
-  # X = .00789 for Severe, .0000667 for Moderate, and 0 otherwise.  Noting that
-  # leakage can't be negative, we have:
-  #
-  #                 LF1     RM1       LF2     RM2         RM1 RM2
-  # Asymptomatic   .075    .925        0       1            .925
-  # Mild           .0188   .812        0       1            .812
-  # Moderate       .075    .925   .0000489  .9999155    .9249218
-  # Severe         .075    .925   .0078722  .9920922    .9176853
-  #
-
-  expand_init <- function(init, len, ext) {
-    nslat <- len/cvy_parms$dt
-    if (init == 0) {
-      return (paste(rep(init/nslat, nslat), collapse=" "))
-    }
-    if (ext == "Asymptomatic") {
-      rem <- .925
-    } else if (ext == "Mild") {
-      rem <- .812
-    } else if (ext == "Moderate") {
-      rem <- .9249218
-    } else if (ext == "Severe") {
-      rem <- .9176853
-    } else {
-      rem = 0.5
-    }
-    slat_base <- rem^(nslat-1:nslat)
-    slat_inflow <- init/sum(slat_base)
-    paste(slat_inflow*slat_base, collapse=" ")
-  }
-
   dims_list <- lapply(dim_names,
                       function(dim_name) cvy_parms$dims_obj$global_dims[[dim_name]])
   ext_list <-combine_dims(dims_list)
@@ -302,7 +246,7 @@ expand_one_conveyor <- function(conveyor_name,
       len=len_vals
     ) %>%
     dplyr::mutate(
-      initValue = Map(expand_init, initValue, len, ext),
+      initValue = Map(conveyor_expand_init, initValue, len, ext, cvy_parms$dt),
       nslats = len/cvy_parms$dt
     ) %>%
     tidyr::separate_longer_delim(initValue, delim = " ") %>%
@@ -359,6 +303,84 @@ expand_one_conveyor <- function(conveyor_name,
        variables = dplyr::bind_rows(new_vars, slat_var, conveyor_stock_var))
 }
 
+#' Calculate initial value in slats, and paste with space-separators
+#'
+#' This is super complicated.  We have the building blocks to calculate, but
+#' for now I'm going to just hardcode the leakage fractions for the one
+#' inital-value conveyor we have.  For this guy we have two leaks.
+#'
+#' ## General Note On Initial Values
+#'
+#' In Stella, initial values are NOT evenly spread among the slots.  They are
+#' placed in such a way that they emulate a steady state (a constant outflow),
+#' given the existing leakages.
+#'
+#' Call SN the initial value in slat N (in 1...M), and LF be a single leak
+#' fraction.  With a steady inflow of INF, the value in slot SN would be
+#'
+#' SN = INF (1-LF)^(M-N)
+#'
+#' Here I take the value BEFORE leakage is removed because leakage is calculated
+#' first before outflow.  Also M is transit time / DT.
+#'
+#' We initialize the conveyor with value init = sum_N(SN)
+#' init = sum(INF (1-LF)^(M-N))
+#'      = INF sum((1-LF)^(M-N)
+#'  INF = init/sum((1-LF)^(M-N))
+#'
+#' Which gives us our initial vector.
+#'
+#'
+#' With 2 leaks, we have INF(1-LF1) left after the first leak, then
+#' INF(1-LF1)(1-LF2) after the second.  Let R1 = 1-LF1 and R2 = 1-LF2,
+#' then
+#' Si = (R1 R2)^(M-i)/sum((R1 R2)^(M-N))
+#'
+#' ## Our hardcoded init
+#'
+#' Here we just hardcode initial slat values for our one nonzero initialized
+#' conveyor.  This conveyor has two leaks.  The first has fraction based on
+#' dimension ("Mild" -> 0.0188, else 0.075).  The second is time varying, but
+#' starts at X-0.000001*17.8, where X = .00789 for Severe, .0000667 for
+#' Moderate, and 0 otherwise.  Noting that leakage can't be negative, we have:
+#'
+#'                 LF1     RM1       LF2     RM2         RM1 RM2
+#' Asymptomatic   .075    .925        0       1            .925
+#' Mild           .0188   .812        0       1            .812
+#' Moderate       .075    .925   .0000489  .9999155    .9249218
+#' Severe         .075    .925   .0078722  .9920922    .9176853
+#'
+#' ## Other nonzero conveyor inits
+#'
+#' For testing purposes, I also put a hardcoded 50% leakage for any other
+#' nonzero conveyor initial values.
+#'
+#' @param init numerical initial value
+#' @param len numerical length of conveyor
+#' @param ext dimension based node name extension
+#' @param dt time delta
+#' @returns space-separated initial values for all slats
+conveyor_expand_init <- function(init, len, ext, dt) {
+  nslat <- len/dt
+  if (init == 0) {
+    return (paste(rep(init/nslat, nslat), collapse=" "))
+  }
+  if (ext == "Asymptomatic") {
+    rem <- .925
+  } else if (ext == "Mild") {
+    rem <- .812
+  } else if (ext == "Moderate") {
+    rem <- .9249218
+  } else if (ext == "Severe") {
+    rem <- .9176853
+  } else {
+    rem = 0.5
+  }
+  slat_base <- rem^(nslat-1:nslat)
+  slat_inflow <- init/sum(slat_base)
+  paste(slat_inflow*slat_base, collapse=" ")
+}
+
 #' Generate variable to equation map for flows out of conveyors
 #'
 #' Unlike other stocks and flows, conveyors dictate the pace of flow.  Here
@@ -373,6 +395,9 @@ expand_one_conveyor <- function(conveyor_name,
 #'   - start with value stored in slot 1 from previous dt
 #'   - subtract outflow leaks
 #'   - inflow from slot 2 is NOT part of this
+#'
+#' @param cvy_parms list of useful parameters
+#' @returns tibble with `name` and `equation` for leaks and outflows
 conveyor_outflow_variables <- function(cvy_parms) {
   oflow_vars <- cvy_parms$cvy_info$flows %>%
     dplyr::filter(!is.na(flows_from)) %>%
@@ -412,13 +437,13 @@ conveyor_outflow_variables <- function(cvy_parms) {
 
   leak_vars %>%
     dplyr::left_join(df_leak_exp, by = "flows_from") %>%
-    dplyr::mutate(fraction = vectorized_array_equations(., eqn, cvy_parms)) %>%
+    vec_array_equations(eqn, cvy_parms) %>%
     tidyr::unite(flows_from, flows_from, ext, sep = "_", na.rm=TRUE) %>%
     dplyr::mutate(
       flows_from = paste0(flows_from, "_slat_vec"),
       name = paste0(name, "_vec"),
       equation = stringr::str_glue(
-        "sd_conveyor_leak({flows_from}, {fraction}, {leak_exp})")) %>%
+        "sd_conveyor_leak({flows_from}, {eqn}, {leak_exp})")) %>%
     dplyr::select(c(name, equation)) %>%
     dplyr::bind_rows(normal_addons) %>%
     dplyr::bind_rows(leak_vec_addons)
@@ -427,9 +452,12 @@ conveyor_outflow_variables <- function(cvy_parms) {
 
 #' Collect leaks which will have an effect on the conveyor outflow
 #'
-#' Returns tibble with fields:
+#' Return fields:
 #' - flows_from: name of upstream conveyor with dimensional extension
 #' - leak_eqn: equation for the (scalar) value leak from slat 1
+#'
+#' @param cvy_parms list of useful parameters
+#' @returns tibble with `flows_from` and `leak_eqn` fields
 conveyor_outflow_leak_effects <- function(cvy_parms) {
     cvy_parms$cvy_info$flows %>%
       dplyr::filter(is_leak & !is.na(flows_from)) %>%
@@ -538,57 +566,60 @@ conveyor_slat_flow_call <- function(base_name, ext, cvy_info) {
 
 #' Reformat equations with dimensional extensions
 #'
-vectorized_array_equations <- function(.data, eqn_col=eqn, cvy_parms) {
+#' Sanitize variable names in equation then expand for all extensions.
+#'
+#' @param .data input data frame
+#' @param eqn_col column to extract equations from (probably eqn or len)
+#' @param cvy_parms conveyor parameters with vendor, dt, dmx
+#' @returns modified data frame with
+vec_array_equations <- function(.data, eqn_col=eqn, cvy_parms) {
 
   if (all(is.na(cvy_parms))) {
     stop("Params object required!")
   }
 
-  dsan <- .data %>%
+  .data %>%
     dplyr::mutate(
-      vae_sanitized = sapply(
+      {{eqn_col}} := sapply(
         {{eqn_col}},
         function(x) sanitise_aux_equation(x, cvy_parms$vendor)
       )
-    )
-
-  add_extension_to_eqn_list(dsan, "vae_sanitized", cvy_parms)
+    ) %>%
+    add_equation_extensions({{eqn_col}}, cvy_parms$dmx)
 }
 
-add_extension_to_eqn_list <- function(.data, eqn_colname, cvy_parms) {
-  arg_list <- .data %>%
-    dplyr::select(c(name, ext, {{eqn_colname}})) %>%
-    dynutils::tibble_as_list()
-  result_list <- sapply(
-    arg_list,
-    function(args)
-      unlist(
-        add_extension_to_one_eqn(args$name, args[eqn_colname], args$ext, cvy_parms)
-      )
-  )
-  result_list
-}
+#' Replace array variables in an equation column with dimensional ones
+#'
+#' Input dataframe has name, ext, and an equation column.  Replace all array
+#' variables in the equation with the appropriate dimensional variable, based
+#' on the extension in the ext column.
+#'
+#' Example transformation
+#'
+#' Specify dmx if all variables are not represented in .data, or if the variable
+#' names in .data have already been extended.
+#'
+#' @param .data input dataframe with all equations to replace
+#' @param eqn_col column to modify
+#' @param dmx (optional) external dataframe with name and ext for all variables
+#' @returns .data with variables in the equation column replaced
+add_equation_extensions <- function(.data, eqn_col, dmx=NA) {
+  if (all(is.na(dmx))) {
+    dmx = .data
+  }
+  df_rep <- dmx %>%
+    tidyr::unite(v_e, name, ext, remove=FALSE, na.rm=TRUE) %>%
+    tidyr::nest(rep_cols=c(name, v_e), .by=ext) %>%
+    tidyr::unnest_wider(rep_cols) %>%
+    dplyr::rename(match = name)
 
-add_extension_to_one_eqn <- function(lhs, rhs, eqn_ext, cvy_parms) {
-  if (is.na(eqn_ext)) {
-    return (rhs)
-  }
-  eq_vars <- extract_variables(lhs, rhs)
-  if (length(eq_vars) == 0) {
-    return (rhs)
-  }
-  ext_vars <- tibble::as_tibble(list(name=eq_vars)) %>%
-    dplyr::left_join(cvy_parms$dmx, by="name") %>%
-    dplyr::filter(is.na(ext) | (ext==eqn_ext)) %>%
-    tidyr::unite(dname, name, ext, remove=FALSE, na.rm=TRUE)
-
-  if (any(!(eq_vars %in% ext_vars$name))) {
-    idx <- !(eq_vars %in% ext_vars$name)
-    bad_vars <- paste(eq_vars[idx], collapse=",")
-    stop(stringr::str_glue(
-      "Dimension Mismatch! Equation for {lhs} uses vars {bad_vars} with {eqn_ext}"))
-  }
-  stringr::str_replace_all(rhs, setNames(ext_vars$dname, ext_vars$name))
+  .data %>%
+    dplyr::left_join(df_rep, by="ext") %>%
+    dplyr::mutate(
+      {{eqn_col}} := stringr::str_replace_all(
+        {{eqn_col}}, setNames(unlist(v_e), unlist(match))),
+      .by=c(name, ext, {{eqn_col}})) %>%
+    dplyr::select(-c(match, v_e))
 }
 
 #' Calculate flow between slats during simulation

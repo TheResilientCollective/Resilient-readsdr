@@ -1,4 +1,11 @@
+library(ggplot2)
+
 #' Plot combined levels (sum of slat values) of one conveyor
+#'
+#' @param results results returned from sd_simulate
+#' @param cname name of conveyor to examine
+#' @param fname if NA (default), plot is returned, else saved to this file
+#' @returns plot unless fname specified
 plot_conveyor_levels <- function(results, cname, fname = NA) {
   plt <- res %>%
     dplyr::select(c(time, matches(paste(cname, "\\w+", "\\d+", sep="_")))) %>%
@@ -16,13 +23,17 @@ plot_conveyor_levels <- function(results, cname, fname = NA) {
   if (is.na(fname)) {
     return(plt)
   }
-  ggplot2::ggsave(plt, filename = fname, width = 5000, height = 1000,
+  ggplot2::ggsave(plt, filename = fname, width = 1500, height = 1000,
                   units = "px")
 }
 
 
 #' Plot levels for all 8 of our conveyors
-plot_all_conveyor_levels <- function(results, write_to_file=FALSE) {
+#'
+#' This just spits all plots out to file, no option to display them locally.
+#'
+#' @param results results returned from sd_simulate
+plot_all_conveyor_levels <- function(results) {
   conveyor_names <- c("infected_not_contagious",
                       "tested_infected_not_contagious",
                       "asymptomatic_contagious",
@@ -32,7 +43,7 @@ plot_all_conveyor_levels <- function(results, write_to_file=FALSE) {
                       "symptomatic_not_contagious",
                       "tested_symptomatic_not_contagious")
   for (cname in conveyor_names) {
-    fname <- ifelse(write_to_file, paste0("LEVELS_", cname, ".png"), NA)
+    fname <- paste0("LEVELS_", cname, ".png")
     plot_conveyor_levels(results, cname, fname)
   }
 }
