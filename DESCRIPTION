@@ -37,7 +37,8 @@ Imports:
     future,
     future.apply,
     progressr,
-    dynutils
+    dynutils,
+    tibble
 BugReports: https://github.com/jandraor/readsdr/issues
 VignetteBuilder: knitr
 Depends: 

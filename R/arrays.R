@@ -117,88 +117,48 @@ create_array_pattern <- function(dims_list) {
 
 }
 
-#' Expand a variable on it's dimensions.
+#' Simple map of sanitized name to all extensions (enumerated dimensions)
 #'
-#' If the variable has dimensions, return a list of new variables expanded on
-#' the dimensions.
-#'
-#' It is assumed that `dims_obj` contains
-#' - `dictionary` which maps variables to lists of dimension names
-#' - `global_dims` which maps dimension names to dimenion elements/categories
-#'
-#' @param var_name name of a variable (\emph{flow}, \emph{aux}, etc)
-#' @param dims_obj object describing model dimensions
-#' @returns list of expanded variable names, one for each combo of dimensions
-#'
-expand_dimensions <- function(var_name, dims_obj) {
-  res <- lapply(var_name, list)
-  calc_idx <- var_name %in% names(dims_obj$dictionary)
-
-  dim_names <- dims_obj$dictionary[var_name[calc_idx]]
-  dims_list <- lapply(dim_names,
-                      function(dim_name) dims_obj$global_dims[[dim_name]])
-  res[calc_idx] <- lapply(
-    var_name[calc_idx],
-    function(vn) lapply(
-      combine_dims(dims_list[vn]),
-      function(d) paste(vn, d, sep="_")))
-
-  res
-}
-
-#' Generate a full data frame with dimensions for all dimensional variables
-#'
-#' This is a table with columns:
+#' Start by generating a table (vdims) with columns:
 #' - name: the sanitized name of one variable (stock, flow, aux)
-#' - dimension.1: the name of the first dimension (NA if non-dimensional)
+#' - dim.1: the name of the first dimension
 #' - elem.1: name of the element for dimension 1
 #' - ...
 #'
 #' There are enough dimension.n and elem.n columns to cover the highest-
 #' dimensional variable.  There is one row for each combination of dimensional
-#' elements for each variable.
+#' elements for each variable (same order as found in the xml file).
 #'
-#' @param dims_obj Dimension dictionary
-#' @returns tibble with columns defined as above
+#' Next we unite all the elem.* columns with an "_" separator into the "ext"
+#' column
 #'
-dimension_tibble <- function(dims_obj) {
+#' @param dims_obj original dimensions object (will generate `dims_tibble`)
+#' @returns tibble with `name` and `ext` (dimension-based name extension)
+dimension_extensions <- function(dims_obj) {
+  if (all(is.na(dims_obj$dictionary)) || all(is.na(dims_obj$global_dims))) {
+    return (tibble::tibble(name=character(), ext=character()))
+  }
+
   maxdims <- max(sapply(dims_obj$dictionary, length))
-  gdims <- tibble::as_tibble(
-    list(dimension=names(dims_obj$global_dims), elem=dims_obj$global_dims)
-  ) %>%
-    tidyr::unnest(elem)
+
+  gdims <- stack(dims_obj$global_dims) %>% dplyr::rename(dim=ind, elem=values)
 
   vdims <- tibble::as_tibble(
-    list(name=names(dims_obj$dictionary), dimension=dims_obj$dictionary)
+    list(name=names(dims_obj$dictionary), dim=dims_obj$dictionary)
   ) %>%
-    tidyr::unnest_wider(dimension, names_sep=".")
+    tidyr::unnest_wider(dim, names_sep=".")
 
-
-  # I know there's a better way to do this...
   for (idx in 1:maxdims) {
-    #dimcol <- paste("dimension", idx, sep=".")
-    dim_map <- setNames(c("dimension"), paste("dimension", idx, sep="."))
+    dim_map <- setNames(c("dim"), paste("dim", idx, sep="."))
     elcol <- paste("elem", idx, sep=".")
     vdims <- vdims %>%
       dplyr::left_join(gdims,
                        by=dim_map,
                        relationship="many-to-many") %>%
       dplyr::rename(!!elcol:=elem)
+  }
 
-  }
-  vdims
-}
-
-#' Simple map of sanitized name to all extensions (enumerated dimensions)
-#'
-dimension_extensions <- function(dims_obj = NA, dims_tibble = NA) {
-  if (is.na(dims_tibble) && is.na(dims_obj)) {
-    stop("dimension_extensions -- Need one of dims_obj or dims_tibble!")
-  }
-  if (is.na(dims_tibble)) {
-    dims_tibble <- dimension_tibble(dims_obj)
-  }
-  dims_tibble %>%
+  vdims %>%
     tidyr::unite(ext, starts_with("elem."), sep="_", na.rm=TRUE) %>%
     dplyr::select(name, ext)
 }

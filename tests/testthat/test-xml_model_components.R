@@ -424,7 +424,8 @@ test_that("create_level_obj_xmile() handles DELAY FIXED from Vensim", {
 })
 
 test_that("create_level_obj_xmile() handles step function in init value", {
-  stocks_xml <- list()
+  # empty nodeset
+  stocks_xml <- xml2::read_xml("<f/>") %>% xml2::xml_find_all("g")
 
   variables <- list(
     list(name     = "orders",
@@ -496,7 +497,7 @@ test_that("extract_stock_info() handles vector stock with a unique initialisatio
     list(name = "E_3", equation = "IR_3-DR_3", initValue = "0"),
     list(name = "E_4", equation = "IR_4-DR_4", initValue = "0"))
 
-  dims_obj <- list(global_dims = list(Age = c(1:4)))
+  dims_obj <- list(global_dims = list(Age = c(1:4)), dictionary = list())
 
   actual_obj <- extract_stock_info(test_stocks_xml[[1]], dims_obj, "isee")
 
